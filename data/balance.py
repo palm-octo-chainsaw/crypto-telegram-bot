@@ -1,7 +1,7 @@
 import requests
 from web3 import Web3
 
-from constants import BTC_ADDRESS, SOL_ADDRESS, SUI_ADDRESS, USDC_ADDRESS
+from constants import BTC_ADDRESS, SOL_ADDRESS, SUI_ADDRESS, USDC_ADDRESS, ETH_ADDRESS
 
 
 class Balance:
@@ -10,7 +10,8 @@ class Balance:
             "BTC": self.get_btc_balance(),
             "SOL": self.get_sol_balance(),
             "SUI": self.get_sui_balance(),
-            "USDC": self.get_usdc_balance()
+            "USDC": self.get_usdc_balance(),
+            "ETH": self.get_eth_balance()
         }
 
     def get_btc_balance(self) -> float:
@@ -68,3 +69,11 @@ class Balance:
         raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(USDC_ADDRESS)).call()
 
         return raw_balance / 1e6
+
+    def get_eth_balance(self) -> float:
+        address = ETH_ADDRESS
+
+        w3 = Web3(Web3.HTTPProvider("https://mainnet.optimism.io"))
+        balance_wei = w3.eth.get_balance(address)
+
+        return float(w3.from_wei(balance_wei, 'ether'))

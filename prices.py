@@ -1,6 +1,6 @@
 import logging
 import requests
-from requests import RequestException
+from requests import RequestException, Response
 from constants import CRYPTO_PRICES_URL
 
 
@@ -8,18 +8,30 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_prices(symbols: list) -> dict:
-    price_dict = {}
+    try:
+        params = {
+            "symbols": ", ".join(map(str, symbols)),
+            "vs_currencies": "usd"
+        }
+        response: Response = requests.get(CRYPTO_PRICES_URL, params=params)
+        response.raise_for_status()
 
-    for sym in symbols:
-        try:
-            response = requests.get(f"{CRYPTO_PRICES_URL}/{sym}")
-            response.raise_for_status()
-            price_dict[sym] = response.json()
+        logger.info("Prices fetched successfully: %s", response)
+        response: dict = response.json()
 
-        except RequestException as error:
-            logger.error(f"Error fetching price for {sym}: {error}")
-            price_dict[sym] = None
+        key: str
+        value: list
+        prices: dict = {}
 
-    logger.debug(f"Fetched prices: {price_dict}")
+        for key, value in response.items():
+            if 'usd' not in value:
+                logger.warning("Price for %s not found", key)
+                continue
 
-    return price_dict
+            prices[key.upper()] = value['usd']
+
+        return prices
+
+    except RequestException as error:
+        logger.error("Error fetching prices: %s", error)
+        return {}

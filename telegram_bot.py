@@ -1,5 +1,6 @@
 import requests
 import logging
+from requests import RequestException, Response
 
 from constants import TELEGRAM_API, CHAT_ID
 
@@ -20,9 +21,9 @@ class Bot():
         }
 
         try:
-            response = requests.post(f"{self.url}/sendMessage", json=payload)
+            response: Response = requests.post(f"{self.url}/sendMessage", json=payload)
             response.raise_for_status()
-            logger.info("[Telegram] Notification sent successfully.")
+            logger.info("[Telegram] Notification sent successfully: %s", response)
 
-        except requests.exceptions.RequestException as error:
+        except RequestException as error:
             logger.error("[Telegram] Failed to send notification: %s", error)
