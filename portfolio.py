@@ -1,5 +1,5 @@
 from utils.helpers import load_json, setup_logging
-from prices import fetch_prices
+from data.prices import fetch_prices
 from telegram_bot import Bot
 from summary import Summary
 from data.balance import Balance

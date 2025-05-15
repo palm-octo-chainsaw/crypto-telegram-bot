@@ -1,7 +1,7 @@
 import requests
 from web3 import Web3
 
-from constants import BTC_ADDRESS, SOL_ADDRESS, SUI_ADDRESS, USDC_ADDRESS, ETH_ADDRESS
+from constants import BTC_ADDRESS, SOL_ADDRESS, SUI_ADDRESS, USDC_ADDRESS, ETH_ADDRESS, DOGE_ADDRESS
 
 
 class Balance:
@@ -11,7 +11,8 @@ class Balance:
             "SOL": self.get_sol_balance(),
             "SUI": self.get_sui_balance(),
             "USDC": self.get_usdc_balance(),
-            "ETH": self.get_eth_balance()
+            "ETH": self.get_eth_balance(),
+            "DOGE": self.get_dodge_balance()
         }
 
     def get_btc_balance(self) -> float:
@@ -77,3 +78,9 @@ class Balance:
         balance_wei = w3.eth.get_balance(address)
 
         return float(w3.from_wei(balance_wei, 'ether'))
+
+    def get_dodge_balance(self) -> float:
+        url = f"https://api.blockcypher.com/v1/doge/main/addrs/{DOGE_ADDRESS}"
+        response = requests.get(url).json()
+
+        return response['final_balance'] / 1e8
