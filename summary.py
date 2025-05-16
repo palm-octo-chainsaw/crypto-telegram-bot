@@ -1,3 +1,6 @@
+from utils.helpers import format_message
+
+
 class Summary:
     def __init__(self):
         self.lines = []
@@ -14,11 +17,13 @@ class Summary:
 
     def flush_summary(self) -> str:
         self._set_header()
-        all_msgs = ["```"] + self.lines + (
-            [""] + self.rebalances
-            if self.rebalances else ["\n✅ Portfolio is balanced."]
-        ) + ["```"]
+        all_msgs = "\n".join(
+            self.lines + (
+                [""] + self.rebalances
+                if self.rebalances else ["\n✅ Portfolio is balanced."]
+            )
+        )
         self.lines.clear()
         self.rebalances.clear()
 
-        return "\n".join(all_msgs)
+        return format_message(all_msgs)

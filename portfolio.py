@@ -39,17 +39,17 @@ class Portfolio:
             target_pct = int(self.targets[symbol])
             diff = current_pct - target_pct
 
-            msg = f"{symbol}: {current_pct:.2f}% (Target: {target_pct}%) {'🔺' if diff > 0 else '🔻'} {diff:.2f}%"
+            msg = f"${symbol}: {current_pct:.2f}% (Target: {target_pct}%) {'🔺' if diff > 0 else '🔻'} {diff:.2f}%"
             logger.info(msg)
             self.summary.add_summary(msg)
 
             if abs(diff) > 5:
-                msg = f"⚠️ *Rebalance Needed*: {symbol} is off by {diff:+.2f}% " \
-                      f"(Current: {current_pct:.2f}; Target: {target_pct}%)"
+                msg = f"⚠️ *Rebalance Needed*: ${symbol} is off by {diff:+.2f}% " \
+                      f"(Current: {current_pct:.2f}%; Target: {target_pct}%)"
                 self.summary.add_rebalance(msg)
 
                 logger.warning(
-                    "⚠️ {} is off by more than 5% from the target allocation! Current: {:.2f}%, Target: {}%".format(
+                    "⚠️ ${} is off by more than 5% from the target allocation! Current: {:.2f}%, Target: {}%".format(
                         symbol, current_pct, target_pct
                     )
                 )
@@ -66,7 +66,7 @@ class Portfolio:
             unit_diff = value_diff / prices[symbol]
             rebalance[symbol] = round(unit_diff, 8)
 
-        self.summary.add_rebalance("\n🧮 *Rebalance Plan*:\n")
+        self.summary.add_rebalance("\n🧮 *Rebalance Plan*\n")
 
         for symbol, amount in rebalance.items():
             if abs(amount) < 1e-6:
@@ -74,7 +74,7 @@ class Portfolio:
 
             action = "Buy" if amount > 0 else "Sell"
             self.summary.add_rebalance(
-                f"{action} {abs(amount):.8f} {symbol} | "
+                f"{action} [{abs(amount):.8f}] ${symbol} | "
                 f"{'-' if action == 'Sell' else ''}${abs(amount*prices[symbol]):.2f} USD"
             )
 
