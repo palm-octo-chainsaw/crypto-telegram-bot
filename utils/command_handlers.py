@@ -14,10 +14,11 @@ targets_file_path = "config/targets.json"
 async def set_bot_commands(bot: ExtBot) -> None:
     await bot.set_my_commands([
         BotCommand("check", "Check portfolio rebalance status"),
-        BotCommand("balance", "Get current portfolio balance"),
-        BotCommand("total", "Get total portfolio value"),
-        BotCommand("set_target", "Set target % for a token (e.g. /set_target BTC 40)"),
+        BotCommand("balance", "Get current portfolio spot balance"),
+        BotCommand("leverage", "Get current portfolio leverage balance"),
         BotCommand("get_targets", "Show current target allocations"),
+        BotCommand("set_target", "Set target % for a token (e.g. /set_target BTC 40)"),
+        BotCommand("total", "Get total portfolio value"),
     ])
 
 
@@ -68,10 +69,22 @@ async def get_total(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"⚠️ Error: {str(error)}", parse_mode="Markdown")
 
 
-async def get_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def get_spot_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         message = "💰 *Portfolio Balance*:\n\n"
-        for symbol, value in Balance().get_balance().items():
+        for symbol, value in Balance().get_spot_balance().items():
+            message += f"{symbol}: {value}\n"
+
+        await update.message.reply_text(format_message(message), parse_mode="Markdown")
+
+    except Exception as error:
+        await update.message.reply_text(f"⚠️ Error: {str(error)}", parse_mode="Markdown")
+
+
+async def get_leverage_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        message = "📈 *Leverage Portfolio Balance*:\n\n"
+        for symbol, value in Balance().get_leverage_balace().items():
             message += f"{symbol}: {value}\n"
 
         await update.message.reply_text(format_message(message), parse_mode="Markdown")

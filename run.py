@@ -5,7 +5,8 @@ from constants import BOT_TOKEN
 from portfolio import Portfolio
 from utils.command_handlers import (
     post_init, check, set_target,
-    get_targets, get_total, get_balance
+    get_targets, get_total, get_spot_balance,
+    get_leverage_balance
 )
 
 
@@ -16,10 +17,11 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("check", check))
-    app.add_handler(CommandHandler("balance", get_balance))
-    app.add_handler(CommandHandler("total", get_total))
-    app.add_handler(CommandHandler("set_target", set_target))
+    app.add_handler(CommandHandler("balance", get_spot_balance))
+    app.add_handler(CommandHandler("leverage", get_leverage_balance))
     app.add_handler(CommandHandler("get_targets", get_targets))
+    app.add_handler(CommandHandler("set_target", set_target))
+    app.add_handler(CommandHandler("total", get_total))
 
     scheduler = BackgroundScheduler({"apscheduler.timezone": "Europe/Sofia"})
     scheduler.add_job(portfolio.process, trigger="cron", hour=10, minute=0, )

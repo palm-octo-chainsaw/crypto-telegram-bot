@@ -13,11 +13,11 @@ class Portfolio:
         self.bot: Bot = Bot()
         self.summary: Summary = Summary()
         self.targets: dict = load_json("config/targets.json")
-        self.portfolio: dict = Balance().get_balance()
+        self.portfolio: dict = Balance().get_spot_balance()
         self.send_rebalance: bool = False
 
     def update_portfolio(self) -> None:
-        self.portfolio = Balance().get_balance()
+        self.portfolio: dict = Balance().get_spot_balance()
         logger.info("Portfolio updated: %s", self.portfolio)
 
     def fetch_live_data(self) -> tuple[dict, dict, float]:
@@ -43,7 +43,7 @@ class Portfolio:
             logger.info(msg)
             self.summary.add_summary(msg)
 
-            if abs(diff) > 5:
+            if abs(diff) > 3:
                 msg = f"⚠️ *Rebalance Needed*: ${symbol} is off by {diff:+.2f}% " \
                       f"(Current: {current_pct:.2f}%; Target: {target_pct}%)"
                 self.summary.add_rebalance(msg)
