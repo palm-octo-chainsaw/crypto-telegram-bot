@@ -1,5 +1,4 @@
 from telegram.ext import ApplicationBuilder, CommandHandler
-from apscheduler.schedulers.background import BackgroundScheduler
 
 from constants import BOT_TOKEN
 from portfolio import Portfolio
@@ -22,9 +21,5 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("get_targets", get_targets))
     app.add_handler(CommandHandler("set_target", set_target))
     app.add_handler(CommandHandler("total", get_total))
-
-    scheduler = BackgroundScheduler({"apscheduler.timezone": "Europe/Sofia"})
-    scheduler.add_job(portfolio.process, trigger="cron", hour=10, minute=0, )
-    scheduler.start()
 
     app.run_polling()
