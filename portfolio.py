@@ -1,3 +1,4 @@
+from typing import Dict, Tuple
 from utils.helpers import load_json, setup_logging
 from data.prices import fetch_prices
 from telegram_bot import Bot
@@ -5,7 +6,7 @@ from summary import Summary
 from data.balance import Balance
 
 
-logger = setup_logging('DEBUG')
+logger = setup_logging('info')
 
 
 class Portfolio:
@@ -16,18 +17,28 @@ class Portfolio:
         self.portfolio: dict = Balance().get_spot_balance()
         self.send_rebalance: bool = False
 
+    def get_targets(self) -> Dict[str, int]:
+        """Return the target allocations."""
+        return self.targets
+
+    def set_target(self, symbol: str, percent: int) -> Dict[str, int]:
+        """Set the target allocation for a specific symbol."""
+        self.targets[symbol] = percent
+        logger.debug("Target for %s set to %d%%", symbol, percent)
+        return self.targets
+
     def update_portfolio(self) -> None:
         self.portfolio: dict = Balance().get_spot_balance()
-        logger.info("Portfolio updated: %s", self.portfolio)
+        logger.debug("Portfolio updated: %s", self.portfolio)
 
-    def fetch_live_data(self) -> tuple[dict, dict, float]:
+    def fetch_live_data(self) -> Tuple[dict, dict, float]:
         prices = fetch_prices([symbol for symbol in self.portfolio])
         values = {
             symbol: amount * prices[symbol]
             for symbol, amount in self.portfolio.items()
         }
         total_value = sum(values.values())
-        logger.info("Total: %s", total_value)
+        logger.debug("Total: %s", total_value)
         return prices, values, total_value
 
     def update_telegram(self, message: str) -> None:
@@ -40,7 +51,7 @@ class Portfolio:
             diff = current_pct - target_pct
 
             msg = f"${symbol}: {current_pct:.2f}% (Target: {target_pct}%) {'🔺' if diff > 0 else '🔻'} {diff:.2f}%"
-            logger.info(msg)
+            logger.debug(msg)
             self.summary.add_summary(msg)
 
             if abs(diff) > 3:
@@ -48,15 +59,15 @@ class Portfolio:
                       f"(Current: {current_pct:.2f}%; Target: {target_pct}%)"
                 self.summary.add_rebalance(msg)
 
-                logger.warning(
+                logger.debug(
                     "⚠️ ${} is off by more than 5% from the target allocation! Current: {:.2f}%, Target: {}%".format(
                         symbol, current_pct, target_pct
                     )
                 )
-                logger.warning("⚠️ Consider rebalancing %s!", symbol)
+                logger.debug("⚠️ Consider rebalancing %s!", symbol)
                 self.send_rebalance = True
 
-    def calculate_rebalance(self, prices: dict, values: dict, total_value) -> dict:
+    def calculate_rebalance(self, prices: dict, values: dict, total_value) -> Dict[str, float]:
         rebalance = {}
 
         for symbol in self.portfolio:

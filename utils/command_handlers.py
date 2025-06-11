@@ -49,8 +49,8 @@ async def set_target(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         symbol = context.args[0].upper()
         percent = int(context.args[1])
-        portfolio.targets[symbol] = percent
-        write_json(portfolio.targets, targets_file_path)
+        portfolio.set_target(symbol, percent)
+        write_json(targets_file_path, portfolio.get_targets())
 
         await update.message.reply_text(f"✅ Target for {symbol} set to {percent}%", parse_mode="Markdown")
 

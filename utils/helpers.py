@@ -15,10 +15,10 @@ def write_json(file_path, data) -> None:
         json.dump(data, file, indent=4)
 
 
-def setup_logging(level) -> Logger:
+def setup_logging(level: str) -> Logger:
     logger = logging.getLogger(__name__)
     logging.basicConfig(
-        level=level,
+        level=level.upper(),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         encoding="utf-8",
         handlers=[
