@@ -6,7 +6,7 @@ from summary import Summary
 from data.balance import Balance
 
 
-logger = setup_logging('info')
+logger = setup_logging('debug')
 
 
 class Portfolio:

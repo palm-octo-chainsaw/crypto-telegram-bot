@@ -11,6 +11,7 @@ SUI_ADDRESS = getenv("SUI_ADDRESS")
 META_MASK = getenv("META_MASK")
 ETH_ADDRESS = getenv("ETH_ADDRESS")
 DOGE_ADDRESS = getenv("DOGE_ADDRESS")
+XRP_ADDRESS = getenv("XRP_ADDRESS")
 TELEGRAM_API = "https://api.telegram.org/bot{}".format(BOT_TOKEN)
 CRYPTO_PRICES_URL = "https://api.coingecko.com/api/v3/simple/price"
 
