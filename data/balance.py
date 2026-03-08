@@ -1,7 +1,10 @@
+import logging
 import requests
 import krakenex
 from web3 import Web3
 from binance.client import Client
+
+logger = logging.getLogger(__name__)
 
 
 from constants import (
@@ -24,8 +27,19 @@ class Balance:
                           {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "",
                                                                                           "type": "string"}],
                           "type": "function"}]
-        self.binance_client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
-        self.kraken_client = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_API_SECRET)
+        self.binance_client = None
+        if BINANCE_API_KEY and BINANCE_API_SECRET:
+            self.binance_client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
+        else:
+            logger.warning("Binance API credentials missing; Binance balances will not be fetched.")
+
+        self.kraken_client = None
+        if KRAKEN_API_KEY and KRAKEN_API_SECRET:
+            self.kraken_client = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_API_SECRET)
+        else:
+            logger.warning("Kraken API credentials missing; Kraken balances will not be fetched.")
+
+        self._binance_balances: dict | None = None
 
     def get_spot_balance(self) -> dict:
         kraken_map = {
@@ -222,23 +236,37 @@ class Balance:
             print(f"XRP Balance Fetch Error: {e}")
             return 0.0
 
-    def get_binance_balance(self, symbol: str) -> float:
-        binance_data = self.binance_client.get_asset_balance(symbol)
+    def _load_binance_balances(self) -> None:
+        if self._binance_balances is not None or not self.binance_client:
+            return
+        try:
+            account_info = self.binance_client.get_account()
+            self._binance_balances = {
+                b["asset"]: float(b["free"]) + float(b["locked"])
+                for b in account_info.get("balances", [])
+            }
+        except Exception as e:
+            logger.error(f"Binance account fetch error: {e}")
+            self._binance_balances = {}
 
-        if binance_data:
-            return float(binance_data['free']) + float(binance_data['locked'])
-        return 0.0
+    def get_binance_balance(self, symbol: str) -> float:
+        if not self.binance_client:
+            return 0.0
+        self._load_binance_balances()
+        return self._binance_balances.get(symbol.upper(), 0.0)
 
     def get_hype_balance(self) -> float:
         return 0.0
 
     def get_raw_kraken_balance(self) -> dict:
+        if not self.kraken_client:
+            return {}
         try:
             result = self.kraken_client.query_private("Balance")
             if result.get("error"):
-                print(f"Kraken API error: {result['error']}")
+                logger.error(f"Kraken API error: {result['error']}")
                 return {}
             return result["result"]
         except Exception as e:
-            print(f"Kraken balance fetch error: {e}")
+            logger.error(f"Kraken balance fetch error: {e}")
             return {}
