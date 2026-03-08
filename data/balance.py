@@ -1,11 +1,16 @@
 import requests
+import krakenex
 from web3 import Web3
+from binance.client import Client
+
 
 from constants import (
     BTC_ADDRESS, SOL_ADDRESS,
     SUI_ADDRESS, META_MASK,
     ETH_ADDRESS, DOGE_ADDRESS,
-    XRP_ADDRESS
+    XRP_ADDRESS,
+    BINANCE_API_KEY, BINANCE_API_SECRET,
+    KRAKEN_API_KEY, KRAKEN_API_SECRET,
 )
 
 
@@ -19,16 +24,38 @@ class Balance:
                           {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "",
                                                                                           "type": "string"}],
                           "type": "function"}]
+        self.binance_client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
+        self.kraken_client = krakenex.API(key=KRAKEN_API_KEY, secret=KRAKEN_API_SECRET)
 
     def get_spot_balance(self) -> dict:
+        kraken_map = {
+            "BTC":  "XXBT",
+            "ETH":  "XETH",
+            "SOL":  "SOL",
+            "XRP":  "XXRP",
+            "DOGE": "XDG",
+            "USDC": "USDC",
+            "LINK": "LINK",
+            "PAXG": "PAXG",
+        }
+
+        kraken_raw = self.get_raw_kraken_balance()
+
+        def kraken(symbol: str) -> float:
+            return float(kraken_raw.get(kraken_map.get(symbol, ""), 0.0))
+
         return {
-            "BTC": self.get_btc_balance(),
-            "SOL": self.get_sol_balance(),
-            "SUI": self.get_sui_balance(),
-            "USDC": self.get_usdc_balance(),
-            "ETH": self.get_eth_balance(),
-            "DOGE": self.get_dodge_balance(),
-            "XRP": self.get_xrp_balance()
+            "BTC":  self.get_btc_balance() + kraken("BTC"),
+            "PAXG": kraken("PAXG"),
+            "SOL":  self.get_sol_balance() + kraken("SOL"),
+            "SUI":  self.get_sui_balance(),
+            "USDC": self.get_usdc_balance() + kraken("USDC"),
+            "ETH":  self.get_eth_balance() + kraken("ETH"),
+            "DOGE": self.get_dodge_balance() + kraken("DOGE"),
+            "XRP":  self.get_xrp_balance() + kraken("XRP"),
+            "LINK": self.get_binance_balance("LINK") + kraken("LINK"),
+            "HYPE": self.get_hype_balance(),
+            "BNB":  self.get_binance_balance("BNB"),
         }
 
     def get_leverage_balace(self) -> dict:
@@ -46,7 +73,7 @@ class Balance:
         address = BTC_ADDRESS
 
         balance = requests.get(f"{url}/{address}").json()
-        return balance / 1e8
+        return (balance / 1e8) + self.get_binance_balance("BTC")
 
     def get_sol_balance(self) -> float:
         url = "https://api.mainnet-beta.solana.com"
@@ -61,7 +88,7 @@ class Balance:
         res = requests.post(url, json=data, headers=headers).json()
         lamports = res["result"]["value"]
 
-        return lamports / 1e9
+        return (lamports / 1e9) + self.get_binance_balance("SOL")
 
     def get_sui_balance(self) -> float:
         url = "https://fullnode.mainnet.sui.io:443"
@@ -77,7 +104,7 @@ class Balance:
 
         for b in balances:
             if b["coinType"] == "0x2::sui::SUI":
-                return int(b["totalBalance"]) / 1e9
+                return (int(b["totalBalance"]) / 1e9) + self.get_binance_balance("SUI")
 
         return 0.0
 
@@ -90,7 +117,7 @@ class Balance:
         decimals = contract.functions.decimals().call()
         raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(META_MASK)).call()
 
-        return raw_balance / (10 ** decimals)
+        return (raw_balance / (10 ** decimals)) + self.get_binance_balance("USDC")
 
     def get_eth_balance(self) -> float:
         """
@@ -104,7 +131,7 @@ class Balance:
                 raise ConnectionError("Failed to connect to the Ethereum node.")
 
             balance_wei = w3.eth.get_balance(Web3.to_checksum_address(wallet))
-            return float(w3.from_wei(balance_wei, 'ether'))
+            return float(w3.from_wei(balance_wei, 'ether')) + self.get_binance_balance("ETH")
 
         except Exception as e:
             print(f"Error fetching ETH balance: {e}")
@@ -114,7 +141,7 @@ class Balance:
         url = f"https://api.blockcypher.com/v1/doge/main/addrs/{DOGE_ADDRESS}"
         response: dict = requests.get(url).json()
 
-        return response.get('final_balance', 0) / 1e8
+        return (response.get('final_balance', 0) / 1e8) + self.get_binance_balance("DOGE")
 
     def get_btcbull2x(self) -> float:
         wallet = META_MASK
@@ -189,8 +216,29 @@ class Balance:
             data = response.json()
             balance_drops = int(data["result"]["account_data"]["Balance"])
 
-            return balance_drops / 1_000_000  # convert from drops to XRP
+            return (balance_drops / 1_000_000) + self.get_binance_balance("XRP")
 
         except Exception as e:
             print(f"XRP Balance Fetch Error: {e}")
             return 0.0
+
+    def get_binance_balance(self, symbol: str) -> float:
+        binance_data = self.binance_client.get_asset_balance(symbol)
+
+        if binance_data:
+            return float(binance_data['free']) + float(binance_data['locked'])
+        return 0.0
+
+    def get_hype_balance(self) -> float:
+        return 0.0
+
+    def get_raw_kraken_balance(self) -> dict:
+        try:
+            result = self.kraken_client.query_private("Balance")
+            if result.get("error"):
+                print(f"Kraken API error: {result['error']}")
+                return {}
+            return result["result"]
+        except Exception as e:
+            print(f"Kraken balance fetch error: {e}")
+            return {}
