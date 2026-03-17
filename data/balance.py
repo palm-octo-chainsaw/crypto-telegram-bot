@@ -18,15 +18,37 @@ from constants import (
 
 
 class Balance:
+    ARBITRUM_RPC = "https://arbitrum-one-rpc.publicnode.com"
+
+    ERC20_ABI = [{"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf",
+                  "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"},
+                  {"constant": True, "inputs": [], "name": "decimals", "outputs": [{"name": "",
+                                                                                    "type": "uint8"}],
+                  "type": "function"},
+                  {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "",
+                                                                                  "type": "string"}],
+                  "type": "function"}]
+
+    KRAKEN_SYMBOL_MAP = {
+        "BTC":  "XXBT",
+        "ETH":  "XETH",
+        "SOL":  "SOL",
+        "XRP":  "XXRP",
+        "DOGE": "XDG",
+        "USDC": "USDC",
+        "LINK": "LINK",
+        "PAXG": "PAXG",
+    }
+
+    USDC_CONTRACT_ADDRESS = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+
+    LEVERAGE_TOKENS = {
+        "BTCBULL2X": "0xe3254397f5D9C0B69917EBb49B49e103367B406f",
+        "BTCBULL4X": "0xd49d22f2a2f05B2088fD42503409E430a8a7D827",
+        "ETHBULL4X": "0xBf4aB4224B2AC26667Cd4b8A0E5134D55cB0B293",
+    }
+
     def __init__(self):
-        self.ERC20_ABI = [{"constant": True, "inputs": [{"name": "_owner", "type": "address"}], "name": "balanceOf",
-                          "outputs": [{"name": "balance", "type": "uint256"}], "type": "function"},
-                          {"constant": True, "inputs": [], "name": "decimals", "outputs": [{"name": "",
-                                                                                            "type": "uint8"}],
-                          "type": "function"},
-                          {"constant": True, "inputs": [], "name": "symbol", "outputs": [{"name": "",
-                                                                                          "type": "string"}],
-                          "type": "function"}]
         self.binance_client = None
         if BINANCE_API_KEY and BINANCE_API_SECRET:
             self.binance_client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
@@ -40,44 +62,65 @@ class Balance:
             logger.warning("Kraken API credentials missing; Kraken balances will not be fetched.")
 
         self._binance_balances: dict | None = None
+        self._w3: Web3 | None = None
+        self._contracts: dict = {}
+
+    @property
+    def w3(self) -> Web3:
+        if self._w3 is None or not self._w3.is_connected():
+            self._w3 = Web3(Web3.HTTPProvider(self.ARBITRUM_RPC))
+            if not self._w3.is_connected():
+                logger.warning("Unable to connect to Arbitrum RPC at %s", self.ARBITRUM_RPC)
+        return self._w3
+
+    def _kraken_balance(self, symbol: str, kraken_raw: dict) -> float:
+        kraken_key = self.KRAKEN_SYMBOL_MAP.get(symbol)
+        if kraken_key is None:
+            return 0.0
+        return float(kraken_raw.get(kraken_key, 0.0))
 
     def get_spot_balance(self) -> dict:
-        kraken_map = {
-            "BTC":  "XXBT",
-            "ETH":  "XETH",
-            "SOL":  "SOL",
-            "XRP":  "XXRP",
-            "DOGE": "XDG",
-            "USDC": "USDC",
-            "LINK": "LINK",
-            "PAXG": "PAXG",
-        }
-
         kraken_raw = self.get_raw_kraken_balance()
 
-        def kraken(symbol: str) -> float:
-            return float(kraken_raw.get(kraken_map.get(symbol, ""), 0.0))
-
         return {
-            "BTC":  self.get_btc_balance() + kraken("BTC"),
-            "PAXG": kraken("PAXG"),
-            "SOL":  self.get_sol_balance() + kraken("SOL"),
+            "BTC":  self.get_btc_balance() + self._kraken_balance("BTC", kraken_raw),
+            "PAXG": self._kraken_balance("PAXG", kraken_raw),
+            "SOL":  self.get_sol_balance() + self._kraken_balance("SOL", kraken_raw),
             "SUI":  self.get_sui_balance(),
-            "USDC": self.get_usdc_balance() + kraken("USDC"),
-            "ETH":  self.get_eth_balance() + kraken("ETH"),
-            "DOGE": self.get_dodge_balance() + kraken("DOGE"),
-            "XRP":  self.get_xrp_balance() + kraken("XRP"),
-            "LINK": self.get_binance_balance("LINK") + kraken("LINK"),
+            "USDC": self.get_usdc_balance() + self._kraken_balance("USDC", kraken_raw),
+            "ETH":  self.get_eth_balance() + self._kraken_balance("ETH", kraken_raw),
+            "DOGE": self.get_dodge_balance() + self._kraken_balance("DOGE", kraken_raw),
+            "XRP":  self.get_xrp_balance() + self._kraken_balance("XRP", kraken_raw),
+            "LINK": self.get_binance_balance("LINK") + self._kraken_balance("LINK", kraken_raw),
             "HYPE": self.get_hype_balance(),
             "BNB":  self.get_binance_balance("BNB"),
         }
 
     def get_leverage_balace(self) -> dict:
         return {
-            "BTCBULL2X": self.get_btcbull2x(),
-            "BTCBULL4X": self.get_btcbull4x(),
-            "ETHBULL4X": self.get_ethbull4x()
+            name: self._get_erc20_balance(address)
+            for name, address in self.LEVERAGE_TOKENS.items()
         }
+
+    def _get_contract(self, token_contract: str):
+        checksum = Web3.to_checksum_address(token_contract)
+        if checksum not in self._contracts:
+            self._contracts[checksum] = self.w3.eth.contract(address=checksum, abi=self.ERC20_ABI)
+        return self._contracts[checksum]
+
+    def _get_erc20_balance(self, token_contract: str) -> float:
+        try:
+            contract = self._get_contract(token_contract)
+            balance = contract.functions.balanceOf(Web3.to_checksum_address(META_MASK)).call()
+            decimals = contract.functions.decimals().call()
+            return balance / (10 ** decimals)
+        except Exception:
+            logger.error(
+                "Error fetching token balance for contract %s",
+                token_contract,
+                exc_info=True,
+            )
+            return 0.0
 
     def get_btc_balance(self) -> float:
         """
@@ -116,39 +159,26 @@ class Balance:
         response: dict = requests.post(url, json=payload).json()
         balances = response.get("result", [])
 
-        for b in balances:
-            if b["coinType"] == "0x2::sui::SUI":
-                return (int(b["totalBalance"]) / 1e9) + self.get_binance_balance("SUI")
+        for coin in balances:
+            if coin["coinType"] == "0x2::sui::SUI":
+                return (int(coin["totalBalance"]) / 1e9) + self.get_binance_balance("SUI")
 
         return 0.0
 
     def get_usdc_balance(self) -> float:
-        ARBITRUM_RPC = "https://arbitrum-one-rpc.publicnode.com"
-        USDC_CONTRACT_ADDRESS = Web3.to_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-
-        web3 = Web3(Web3.HTTPProvider(ARBITRUM_RPC))
-        contract = web3.eth.contract(address=USDC_CONTRACT_ADDRESS, abi=self.ERC20_ABI)
-        decimals = contract.functions.decimals().call()
-        raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(META_MASK)).call()
-
-        return (raw_balance / (10 ** decimals)) + self.get_binance_balance("USDC")
+        return self._get_erc20_balance(self.USDC_CONTRACT_ADDRESS) + self.get_binance_balance("USDC")
 
     def get_eth_balance(self) -> float:
         """
         Returns ETH balance (in ETH) for the given wallet address using the provided RPC URL.
         """
         wallet = ETH_ADDRESS
-        ARBITRUM_RPC = "https://arbitrum-one-rpc.publicnode.com"
         try:
-            w3 = Web3(Web3.HTTPProvider(ARBITRUM_RPC))
-            if not w3.is_connected():
-                raise ConnectionError("Failed to connect to the Ethereum node.")
+            balance_wei = self.w3.eth.get_balance(Web3.to_checksum_address(wallet))
+            return float(self.w3.from_wei(balance_wei, 'ether')) + self.get_binance_balance("ETH")
 
-            balance_wei = w3.eth.get_balance(Web3.to_checksum_address(wallet))
-            return float(w3.from_wei(balance_wei, 'ether')) + self.get_binance_balance("ETH")
-
-        except Exception as e:
-            print(f"Error fetching ETH balance: {e}")
+        except Exception:
+            logger.error("Error fetching ETH balance", exc_info=True)
             return 0.0
 
     def get_dodge_balance(self) -> float:
@@ -156,60 +186,6 @@ class Balance:
         response: dict = requests.get(url).json()
 
         return (response.get('final_balance', 0) / 1e8) + self.get_binance_balance("DOGE")
-
-    def get_btcbull2x(self) -> float:
-        wallet = META_MASK
-        token_contract = "0xe3254397f5D9C0B69917EBb49B49e103367B406f"
-        infra_url = "https://arbitrum-one-rpc.publicnode.com"
-
-        w3 = Web3(Web3.HTTPProvider(infra_url))
-
-        try:
-            contract = w3.eth.contract(address=Web3.to_checksum_address(token_contract), abi=self.ERC20_ABI)
-            balance = contract.functions.balanceOf(Web3.to_checksum_address(wallet)).call()
-            decimals = contract.functions.decimals().call()
-
-            return balance / (10 ** decimals)
-
-        except Exception as e:
-            print(f"Error fetching token balance: {e}")
-            return 0.0
-
-    def get_btcbull4x(self) -> float:
-        wallet = META_MASK
-        token_contract = "0xd49d22f2a2f05B2088fD42503409E430a8a7D827"
-        infra_url = "https://arbitrum-one-rpc.publicnode.com"
-
-        w3 = Web3(Web3.HTTPProvider(infra_url))
-
-        try:
-            contract = w3.eth.contract(address=Web3.to_checksum_address(token_contract), abi=self.ERC20_ABI)
-            balance = contract.functions.balanceOf(Web3.to_checksum_address(wallet)).call()
-            decimals = contract.functions.decimals().call()
-
-            return balance / (10 ** decimals)
-
-        except Exception as e:
-            print(f"Error fetching token balance: {e}")
-            return 0.0
-
-    def get_ethbull4x(self) -> float:
-        wallet = META_MASK
-        token_contract = "0xBf4aB4224B2AC26667Cd4b8A0E5134D55cB0B293"
-        infra_url = "https://arbitrum-one-rpc.publicnode.com"
-
-        w3 = Web3(Web3.HTTPProvider(infra_url))
-
-        try:
-            contract = w3.eth.contract(address=Web3.to_checksum_address(token_contract), abi=self.ERC20_ABI)
-            balance = contract.functions.balanceOf(Web3.to_checksum_address(wallet)).call()
-            decimals = contract.functions.decimals().call()
-
-            return balance / (10 ** decimals)
-
-        except Exception as e:
-            print(f"Error fetching token balance: {e}")
-            return 0.0
 
     def get_xrp_balance(self) -> float:
         address = XRP_ADDRESS
@@ -232,8 +208,8 @@ class Balance:
 
             return (balance_drops / 1_000_000) + self.get_binance_balance("XRP")
 
-        except Exception as e:
-            print(f"XRP Balance Fetch Error: {e}")
+        except Exception:
+            logger.error("XRP balance fetch error", exc_info=True)
             return 0.0
 
     def _load_binance_balances(self) -> None:
@@ -242,12 +218,20 @@ class Balance:
         try:
             account_info = self.binance_client.get_account()
             self._binance_balances = {
-                b["asset"]: float(b["free"]) + float(b["locked"])
-                for b in account_info.get("balances", [])
+                entry["asset"]: float(entry["free"]) + float(entry["locked"])
+                for entry in account_info.get("balances", [])
             }
         except Exception as e:
             logger.error(f"Binance account fetch error: {e}")
             self._binance_balances = {}
+
+    def refresh_binance_balances(self) -> None:
+        if not self.binance_client:
+            return
+        self._binance_balances = None
+        self._load_binance_balances()
+
+    reload_binance_balances = refresh_binance_balances
 
     def get_binance_balance(self, symbol: str) -> float:
         if not self.binance_client:
