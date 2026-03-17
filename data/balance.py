@@ -143,20 +143,14 @@ class Balance:
         response: dict = requests.post(url, json=payload).json()
         balances = response.get("result", [])
 
-        for b in balances:
-            if b["coinType"] == "0x2::sui::SUI":
-                return (int(b["totalBalance"]) / 1e9) + self.get_binance_balance("SUI")
+        for coin in balances:
+            if coin["coinType"] == "0x2::sui::SUI":
+                return (int(coin["totalBalance"]) / 1e9) + self.get_binance_balance("SUI")
 
         return 0.0
 
     def get_usdc_balance(self) -> float:
-        USDC_CONTRACT_ADDRESS = Web3.to_checksum_address("0xaf88d065e77c8cC2239327C5EDb3A432268e5831")
-
-        contract = self.w3.eth.contract(address=USDC_CONTRACT_ADDRESS, abi=self.ERC20_ABI)
-        decimals = contract.functions.decimals().call()
-        raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(META_MASK)).call()
-
-        return (raw_balance / (10 ** decimals)) + self.get_binance_balance("USDC")
+        return self._get_erc20_balance("0xaf88d065e77c8cC2239327C5EDb3A432268e5831") + self.get_binance_balance("USDC")
 
     def get_eth_balance(self) -> float:
         """
@@ -211,18 +205,15 @@ class Balance:
         try:
             account_info = self.binance_client.get_account()
             self._binance_balances = {
-                b["asset"]: float(b["free"]) + float(b["locked"])
-                for b in account_info.get("balances", [])
+                entry["asset"]: float(entry["free"]) + float(entry["locked"])
+                for entry in account_info.get("balances", [])
             }
         except Exception as e:
             logger.error(f"Binance account fetch error: {e}")
             self._binance_balances = {}
 
-    def invalidate_binance_cache(self) -> None:
-        self._binance_balances = None
-
     def refresh_binance_balances(self) -> None:
-        self.invalidate_binance_cache()
+        self._binance_balances = None
         self._load_binance_balances()
 
     def get_binance_balance(self, symbol: str) -> float:
