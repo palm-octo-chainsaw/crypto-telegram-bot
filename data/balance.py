@@ -40,6 +40,8 @@ class Balance:
         "PAXG": "PAXG",
     }
 
+    USDC_CONTRACT_ADDRESS = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+
     LEVERAGE_TOKENS = {
         "BTCBULL2X": "0xe3254397f5D9C0B69917EBb49B49e103367B406f",
         "BTCBULL4X": "0xd49d22f2a2f05B2088fD42503409E430a8a7D827",
@@ -64,12 +66,17 @@ class Balance:
 
     @property
     def w3(self) -> Web3:
-        if self._w3 is None:
+        if self._w3 is None or not self._w3.is_connected():
             self._w3 = Web3(Web3.HTTPProvider(self.ARBITRUM_RPC))
+            if not self._w3.is_connected():
+                raise ConnectionError(f"Unable to connect to Arbitrum RPC at {self.ARBITRUM_RPC}")
         return self._w3
 
     def _kraken_balance(self, symbol: str, kraken_raw: dict) -> float:
-        return float(kraken_raw.get(self.KRAKEN_SYMBOL_MAP.get(symbol, ""), 0.0))
+        kraken_key = self.KRAKEN_SYMBOL_MAP.get(symbol)
+        if kraken_key is None:
+            return 0.0
+        return float(kraken_raw.get(kraken_key, 0.0))
 
     def get_spot_balance(self) -> dict:
         kraken_raw = self.get_raw_kraken_balance()
@@ -102,8 +109,12 @@ class Balance:
             balance = contract.functions.balanceOf(Web3.to_checksum_address(META_MASK)).call()
             decimals = contract.functions.decimals().call()
             return balance / (10 ** decimals)
-        except Exception as e:
-            logger.error(f"Error fetching token balance for contract {token_contract}: {e}")
+        except Exception:
+            logger.error(
+                "Error fetching token balance for contract %s",
+                token_contract,
+                exc_info=True,
+            )
             return 0.0
 
     def get_btc_balance(self) -> float:
@@ -150,7 +161,7 @@ class Balance:
         return 0.0
 
     def get_usdc_balance(self) -> float:
-        return self._get_erc20_balance("0xaf88d065e77c8cC2239327C5EDb3A432268e5831") + self.get_binance_balance("USDC")
+        return self._get_erc20_balance(self.USDC_CONTRACT_ADDRESS) + self.get_binance_balance("USDC")
 
     def get_eth_balance(self) -> float:
         """
@@ -158,9 +169,6 @@ class Balance:
         """
         wallet = ETH_ADDRESS
         try:
-            if not self.w3.is_connected():
-                raise ConnectionError("Failed to connect to the Ethereum node.")
-
             balance_wei = self.w3.eth.get_balance(Web3.to_checksum_address(wallet))
             return float(self.w3.from_wei(balance_wei, 'ether')) + self.get_binance_balance("ETH")
 
@@ -212,7 +220,7 @@ class Balance:
             logger.error(f"Binance account fetch error: {e}")
             self._binance_balances = {}
 
-    def refresh_binance_balances(self) -> None:
+    def reload_binance_balances(self) -> None:
         self._binance_balances = None
         self._load_binance_balances()
 
