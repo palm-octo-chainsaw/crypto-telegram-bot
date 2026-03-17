@@ -69,7 +69,7 @@ class Balance:
         if self._w3 is None or not self._w3.is_connected():
             self._w3 = Web3(Web3.HTTPProvider(self.ARBITRUM_RPC))
             if not self._w3.is_connected():
-                raise ConnectionError(f"Unable to connect to Arbitrum RPC at {self.ARBITRUM_RPC}")
+                logger.warning("Unable to connect to Arbitrum RPC at %s", self.ARBITRUM_RPC)
         return self._w3
 
     def _kraken_balance(self, symbol: str, kraken_raw: dict) -> float:
@@ -220,9 +220,11 @@ class Balance:
             logger.error(f"Binance account fetch error: {e}")
             self._binance_balances = {}
 
-    def reload_binance_balances(self) -> None:
+    def refresh_binance_balances(self) -> None:
         self._binance_balances = None
         self._load_binance_balances()
+
+    reload_binance_balances = refresh_binance_balances
 
     def get_binance_balance(self, symbol: str) -> float:
         if not self.binance_client:
