@@ -103,7 +103,7 @@ class Balance:
             decimals = contract.functions.decimals().call()
             return balance / (10 ** decimals)
         except Exception as e:
-            logger.error(f"Error fetching token balance: {e}")
+            logger.error(f"Error fetching token balance for contract {token_contract}: {e}")
             return 0.0
 
     def get_btc_balance(self) -> float:
@@ -218,8 +218,11 @@ class Balance:
             logger.error(f"Binance account fetch error: {e}")
             self._binance_balances = {}
 
-    def refresh_binance_balances(self) -> None:
+    def invalidate_binance_cache(self) -> None:
         self._binance_balances = None
+
+    def refresh_binance_balances(self) -> None:
+        self.invalidate_binance_cache()
         self._load_binance_balances()
 
     def get_binance_balance(self, symbol: str) -> float:
