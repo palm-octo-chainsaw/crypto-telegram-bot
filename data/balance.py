@@ -63,6 +63,7 @@ class Balance:
 
         self._binance_balances: dict | None = None
         self._w3: Web3 | None = None
+        self._contracts: dict = {}
 
     @property
     def w3(self) -> Web3:
@@ -101,11 +102,15 @@ class Balance:
             for name, address in self.LEVERAGE_TOKENS.items()
         }
 
+    def _get_contract(self, token_contract: str):
+        checksum = Web3.to_checksum_address(token_contract)
+        if checksum not in self._contracts:
+            self._contracts[checksum] = self.w3.eth.contract(address=checksum, abi=self.ERC20_ABI)
+        return self._contracts[checksum]
+
     def _get_erc20_balance(self, token_contract: str) -> float:
         try:
-            contract = self.w3.eth.contract(
-                address=Web3.to_checksum_address(token_contract), abi=self.ERC20_ABI
-            )
+            contract = self._get_contract(token_contract)
             balance = contract.functions.balanceOf(Web3.to_checksum_address(META_MASK)).call()
             decimals = contract.functions.decimals().call()
             return balance / (10 ** decimals)
@@ -172,8 +177,8 @@ class Balance:
             balance_wei = self.w3.eth.get_balance(Web3.to_checksum_address(wallet))
             return float(self.w3.from_wei(balance_wei, 'ether')) + self.get_binance_balance("ETH")
 
-        except Exception as e:
-            print(f"Error fetching ETH balance: {e}")
+        except Exception:
+            logger.error("Error fetching ETH balance", exc_info=True)
             return 0.0
 
     def get_dodge_balance(self) -> float:
@@ -203,8 +208,8 @@ class Balance:
 
             return (balance_drops / 1_000_000) + self.get_binance_balance("XRP")
 
-        except Exception as e:
-            print(f"XRP Balance Fetch Error: {e}")
+        except Exception:
+            logger.error("XRP balance fetch error", exc_info=True)
             return 0.0
 
     def _load_binance_balances(self) -> None:
@@ -221,6 +226,8 @@ class Balance:
             self._binance_balances = {}
 
     def refresh_binance_balances(self) -> None:
+        if not self.binance_client:
+            return
         self._binance_balances = None
         self._load_binance_balances()
 
