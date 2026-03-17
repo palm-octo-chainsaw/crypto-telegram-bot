@@ -48,7 +48,9 @@ async def get_targets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def set_target(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         symbol = context.args[0].upper()
-        percent = int(context.args[1])
+        percent = float(context.args[1])
+        if not 0.0 <= percent <= 100.0:
+            raise ValueError("Target percentage must be between 0 and 100.")
         portfolio.set_target(symbol, percent)
         write_json(targets_file_path, portfolio.get_targets())
 
